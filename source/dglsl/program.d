@@ -37,6 +37,133 @@ class Program(T...) {
 }
 
 /*
+	exposes named vertex attribute bindings, like Program exposes uniform bindings.
+	it would be better if it inhereted from Program, or was absorbed into Program
+*/
+template AttribProgram(P) if(is(P == Program!T, T...))
+{
+	static if(is(P == Program!Shaders, Shaders...)) {}
+
+	import std.range;
+	import std.meta;
+	import std.traits;
+	import std.format;
+
+	class AttribProgram
+	{
+		P program; alias program this;
+		GLuint vao;
+
+		void use()
+		{
+			glUseProgram(program.id);
+			glBindVertexArray(vao);
+		}
+
+		mixin(attribSetters.only.join("\n"));
+
+		this(P program)
+		{
+			this.program = program;
+
+			glGenVertexArrays(1, &vao);
+			glBindVertexArray(vao);
+		}
+		~this()
+		{
+			glDeleteVertexArrays(1, &vao);
+		}
+	}
+
+	alias attribSetters = staticMap!(declAttribSetter, VertexAttribs);
+
+	template declAttribSetter(VertexAttrib)
+	{
+		alias In = VertexAttrib;
+
+		enum declAttribSetter = format(q{
+				void %s(GLuint id)
+				{
+					glEnableVertexAttribArray(%s);
+					glBindBuffer(GL_ARRAY_BUFFER, id);
+					glVertexAttribPointer(%s, %s, %s, false, 0, null);
+				}
+			},
+			In.name,
+			In.location, 
+			In.location, glElementSize!(In.Type), glElementType!(In.Type),
+		);
+	}
+
+	alias VertexAttribs = staticMap!(
+		VertexAttrib,
+		Filter!(isVertexAttrib,
+			__traits(derivedMembers, VertexShader)
+		)
+	);
+
+	struct VertexAttrib(string attribName)
+	{
+		enum name = attribName;
+		alias Type = typeof(__traits(getMember, VertexShader, name));
+		enum location = getUDAs!(__traits(getMember, VertexShader, attribName), Layout)[0].location.value;
+	}
+
+	template isVertexAttrib(string member)
+	{
+		enum isVertexAttrib
+			= !hasUDA!(__traits(getMember, VertexShader, member), ignore) 
+			&& hasUDA!(__traits(getMember, VertexShader, member), input)
+			&& hasUDA!(__traits(getMember, VertexShader, member), Layout)
+			;
+	}
+
+	alias VertexShader = Filter!(isVertexShader, Shaders)[0];
+
+	enum isVertexShader(S) = S.type == "vertex";
+}
+template exposeVertexAttribs(P) if(is(P == Program!T, T...))
+{
+	AttribProgram!P exposeVertexAttribs(P p)
+	{ return new typeof(return)(p); }
+}
+
+GLuint glElementSize(T)()
+{
+	static if(is(T == Vector!(A,n), A, uint n))
+		return n;
+	else
+		return 1;
+}
+GLuint glElementType(T)()
+{
+	static if(is(T == Vector!(A,n), A, uint n))
+		return glType!A;
+	else
+		return glType!T;
+}
+GLuint glType(T)()
+{
+	import std.traits;
+	import std.algorithm;
+	import std.ascii;
+	import std.conv;
+
+	enum scalar(U) = `GL_` ~(isUnsigned!U? `UNSIGNED_` ~U.stringof.map!toUpper.text[1..$] : U.stringof.map!toUpper.text);
+	enum vector(uint n, U) = scalar!U~ `_VEC` ~n.text;
+	enum matrix(uint m, uint n, U) = scalar!U~ `_MAT` ~n.text ~(m == n? `` : `x` ~m.text);
+
+	static if (is (T == Matrix!(U,m,n), uint m, uint n, U))
+		return mixin(matrix!(m,n,U));
+	else static if (is (T == Vector!(U,n), uint n, U))
+		return mixin(vector!(n,U));
+	else 
+		return mixin(scalar!T);
+}
+
+
+
+/*
 ** プログラムの情報を表示する
 ** from: http://marina.sys.wakayama-u.ac.jp/~tokoi/?date=20090827
 */
