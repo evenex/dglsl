@@ -84,6 +84,7 @@ template AttribProgram(P) if(is(P == Program!T, T...))
 		enum declAttribSetter = format(q{
 				void %s(GLuint id)
 				{
+					use;
 					glEnableVertexAttribArray(%s);
 					glBindBuffer(GL_ARRAY_BUFFER, id);
 					glVertexAttribPointer(%s, %s, %s, false, 0, null);
