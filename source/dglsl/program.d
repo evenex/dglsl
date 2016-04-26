@@ -40,31 +40,28 @@ class Program(T...) {
 	exposes named vertex attribute bindings, like Program exposes uniform bindings.
 	it would be better if it inhereted from Program, or was absorbed into Program
 */
-template AttribProgram(P) if(is(P == Program!T, T...))
+template AttribProgram(Shaders...)
 {
-	static if(is(P == Program!Shaders, Shaders...)) {}
-
 	import std.range;
 	import std.meta;
 	import std.traits;
 	import std.format;
 
-	class AttribProgram
+	class AttribProgram : Program!Shaders
 	{
-		P program; alias program this;
 		GLuint vao;
 
 		void use()
 		{
-			glUseProgram(program.id);
-			glBindVertexArray(vao);
+			glUseProgram(this.id);
+			glBindVertexArray(this.vao);
 		}
 
 		mixin(attribSetters.only.join("\n"));
 
-		this(P program)
+		this(Shaders shaders)
 		{
-			this.program = program;
+			super(shaders);
 
 			glGenVertexArrays(1, &vao);
 			glBindVertexArray(vao);
@@ -122,11 +119,6 @@ template AttribProgram(P) if(is(P == Program!T, T...))
 	alias VertexShader = Filter!(isVertexShader, Shaders)[0];
 
 	enum isVertexShader(S) = S.type == "vertex";
-}
-template exposeVertexAttribs(P) if(is(P == Program!T, T...))
-{
-	AttribProgram!P exposeVertexAttribs(P p)
-	{ return new typeof(return)(p); }
 }
 
 GLuint glElementSize(T)()
